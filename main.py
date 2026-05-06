@@ -1,10 +1,13 @@
 import pygame
 import random
 import sys
+import os
+
+os.environ['SDL_VIDEO_CENTERED'] = '1'
 pygame.display.init()
 pygame.font.init()
 
-WIDTH, HEIGHT = 400,600
+WIDTH, HEIGHT = 300,600
 GRID_SIZE = 25
 screen = pygame.display.set_mode((WIDTH,HEIGHT))
 clock = pygame.time.Clock()
@@ -34,9 +37,9 @@ SHAPES = [
         #pos 1
         ['.....',
     	'.....',
-    	'.....',
     	'0000.',
-    	'.....'
+    	'.....',
+		'.....'
 		],
 	   
 	   #pos 2
@@ -54,10 +57,10 @@ SHAPES = [
         #pos 1
         [
             '.....',
-        	'.....',
         	'..0..',
         	'.000.',
-        	'.....'
+        	'.....',
+	        '.....'
 		],
 
 	#pos 2
@@ -99,19 +102,19 @@ SHAPES = [
 		],
         #pos 2
  		[
-            '.....',
+			'.....',
+			'.....',
             '.000.',
             '.0...',
-            '.....',
             '.....'
 		],
 
          #pos 3
         [
             '.....',
-            '..00.',
-            '...0.',
-            '...0.',
+            '.00..',
+            '..0..',
+            '..0..',
             '.....'
 		],
          #pos 4
@@ -128,9 +131,9 @@ SHAPES = [
         #pos 1
 		[
 			'.....',
-			'...0.',
-			'...0.',
-			'..00.',
+			'..0..',
+			'..0..',
+			'.00..',
 			'.....'
 		],
 
@@ -212,7 +215,6 @@ class TetrisBlock:
 		self.y = y
 		self.shape = shape
 		self.color = random.choice(COLORS)
-
 		#start at initial position
 		self.rotation = 0
 
@@ -225,6 +227,8 @@ class Tetris:
 		self.grid = [[0 for _ in range(width)] for _ in range(height)]
 		self.current_block = self.new_block()
 		self.game_over = False
+		self.lock_delay = 300
+		self.lock_timer = 0
 
 	# create a new block with random color
 	def new_block(self):
@@ -269,12 +273,15 @@ class Tetris:
 	def clear_lines(self):
 		lines_cleared = 0
 		# for each item in the grid starting at the bottom check if it's full
-		for i in range(len(self.grid)-1,-1,-1):
+		i = len(self.grid)-1
+		while i >= 0:
 			if all(cell !=0 for cell in self.grid[i]):
 				#all slots are full, add to lines_cleared and remove that section from grid and fill with empty slots.
-				lines_cleared += 1
 				del self.grid[i]
+				lines_cleared += 1
 				self.grid.insert(0,[0 for _ in range(self.width)])
+			else:
+				i -= 1
 		return lines_cleared
 	
 	def lock_block(self,block):
@@ -295,15 +302,20 @@ class Tetris:
 		#if block has reached the bottom, lock its position and return the number of lines cleared
 		return lines_cleared
 	
-	def update(self):
-		#move block one down if valid
+	def update(self,dt):
+		#check if the game is done
 		if not self.game_over:
-			if self.valid_move(self.current_block,0,1,0):
-				#empty space under block, move down one.
-				self.current_block.y +=1
-			else:
-				#area under block is filled, lock the block in it's position.
+			#if the block can move down, update its position
+			if self.valid_move(self.current_block, 0, 1, 0):
+				# reset the lock timer
+				self.lock_timer = 0
+				return
+			# if block cant move down, start the delay timer
+			self.lock_timer += dt #time since last frame
+			#if timer passes delay, lock the position
+			if self.lock_timer > self.lock_delay:
 				self.lock_block(self.current_block)
+				self.lock_timer = 0
 
 	#draw the blocks based on it's color and grid size.
 	def draw(self):
@@ -349,7 +361,7 @@ def main():
 
 	#how fast the block moves dowm, in milliseconds.
 	fall_time = 0
-	fall_speed = 500
+	fall_speed = 100
 
 	# for continuous movement, the delay for intermittent shifting.
 	move_time = 0
@@ -380,6 +392,7 @@ def main():
 					if not game.game_over:
 						if game.valid_move(game.current_block, 0, 0, 1):
 							game.current_block.rotation += 1  # rotate the block
+							game.lock_timer = 0
 
 				#if user presses spacebar, drop the block to the lowest position.
 				if event.key == pygame.K_SPACE:
@@ -388,7 +401,7 @@ def main():
 							game.current_block.y += 1
 						game.lock_block(game.current_block)
 
-		dtime = clock.tick(60)  # get milliseconds since last frame
+		dtime = clock.tick(100)  # get milliseconds since last frame
 		fall_time += dtime
 
 		#CONTINUOUS PRESS ACTIONS
@@ -403,25 +416,35 @@ def main():
 				if keys[pygame.K_LEFT]:
 					if game.valid_move(game.current_block, -1, 0, 0):
 						game.current_block.x -= 1
+						game.lock_timer = 0
 
 				#if user holds down right, keep moving block right.
 				if keys[pygame.K_RIGHT]:
 					if game.valid_move(game.current_block, 1, 0, 0):
 						game.current_block.x += 1
+						game.lock_timer = 0
 
 				#if user holds down right, move block down faster.
 				if keys[pygame.K_DOWN]:
 					if game.valid_move(game.current_block, 0, 1, 0):
 						game.current_block.y += 1
+						game.lock_timer = 0
 				move_time = 0
 
 
-		#add number of milliseconds to fall time
 
-		#only update the block if game is ongoing.
-		if not game.game_over and fall_time >= fall_speed:
-			game.update()
-			fall_time = 0
+			if not game.game_over:
+				if fall_time >= fall_speed:
+					fall_time = 0
+					if game.valid_move(game.current_block, 0, 1, 0):
+						game.current_block.y += 1
+					else:
+						game.update(dtime)
+				else:
+					game.update(dtime)
+		#update the block if game is ongoing every frame.
+
+
 
 		game.draw()
 
